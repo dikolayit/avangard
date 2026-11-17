@@ -1611,6 +1611,7 @@
     // ==================== 5. АНИМАЦИИ И ПЛАВНАЯ ПРОКРУТКА ====================
     document.documentElement.classList.add('js');
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let syncWheelTarget = () => {};
 
     // Плавная прокрутка по якорям: неторопливый easing, учёт высоты шапки
     const easeInOutQuint = t => (t < 0.5 ? 16 * t ** 5 : 1 - Math.pow(-2 * t + 2, 5) / 2);
@@ -1649,6 +1650,7 @@
       const targetY = el.getBoundingClientRect().top + window.pageYOffset - offset;
       closeMobileMenu();
       history.replaceState(null, '', id);
+      syncWheelTarget();
       smoothScrollTo(targetY);
     });
 
@@ -1702,6 +1704,48 @@
         el.classList.add('reveal');
         io.observe(el);
       });
+    }
+
+    // ==================== 6. ПЛАВНАЯ ПРОКРУТКА КОЛЕСОМ И ТАЧПАДОМ ====================
+    // Колесо/тачпад на десктопе сглаживаются (инерция с догоняющим движением).
+    // На сенсорных экранах и при «уменьшении движения» остаётся родная прокрутка.
+    if (!prefersReduced && window.matchMedia('(pointer: fine)').matches) {
+      const root = document.documentElement;
+      root.style.scrollBehavior = 'auto'; // иначе CSS scroll-smooth будет мешать покадровому движению
+
+      let wheelTarget = window.pageYOffset;
+      let wheelCurrent = wheelTarget;
+      let wheelRaf = null;
+      const maxScroll = () => root.scrollHeight - window.innerHeight;
+
+      const wheelTick = () => {
+        wheelCurrent += (wheelTarget - wheelCurrent) * 0.085;
+        if (Math.abs(wheelTarget - wheelCurrent) < 0.5) wheelCurrent = wheelTarget;
+        window.scrollTo(0, wheelCurrent);
+        wheelRaf = wheelCurrent !== wheelTarget ? requestAnimationFrame(wheelTick) : null;
+      };
+
+      syncWheelTarget = () => {
+        if (wheelRaf) { cancelAnimationFrame(wheelRaf); wheelRaf = null; }
+        wheelTarget = wheelCurrent = window.pageYOffset;
+      };
+
+      window.addEventListener('wheel', e => {
+        if (e.ctrlKey) return; // масштабирование страницы — не трогаем
+        if (e.target.closest && e.target.closest('select, textarea, input, [data-native-scroll]')) return;
+        e.preventDefault();
+        const delta = e.deltaMode === 1 ? e.deltaY * 32 : e.deltaY;
+        wheelTarget = Math.min(Math.max(wheelTarget + delta, 0), maxScroll());
+        if (!wheelRaf) {
+          wheelCurrent = window.pageYOffset;
+          wheelRaf = requestAnimationFrame(wheelTick);
+        }
+      }, { passive: false });
+
+      // Если страница прокручена иначе (клавиатура, полоса прокрутки), синхронизируем цель
+      window.addEventListener('scroll', () => {
+        if (!wheelRaf) wheelTarget = wheelCurrent = window.pageYOffset;
+      }, { passive: true });
     }
   </script>
 </body>
