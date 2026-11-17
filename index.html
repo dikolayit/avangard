@@ -64,6 +64,29 @@
     input[type="number"] {
       -moz-appearance: textfield;
     }
+    /* ===== Премиальные анимации появления и наведения ===== */
+    .js .reveal {
+      opacity: 0;
+      transform: translateY(44px);
+      filter: blur(6px);
+      transition:
+        opacity 1.3s cubic-bezier(.16, 1, .3, 1),
+        transform 1.3s cubic-bezier(.16, 1, .3, 1),
+        filter 1.1s cubic-bezier(.16, 1, .3, 1),
+        translate .7s cubic-bezier(.16, 1, .3, 1),
+        box-shadow .7s ease,
+        border-color .6s ease;
+      transition-delay: var(--d, 0ms);
+    }
+    .js .reveal.is-visible { opacity: 1; transform: none; filter: none; }
+    .lift:hover {
+      translate: 0 -6px;
+      box-shadow: 0 30px 60px -28px rgba(17, 19, 21, .30);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .js .reveal { opacity: 1; transform: none; filter: none; transition: none; }
+      .lift:hover { translate: none; }
+    }
   </style>
 </head>
 <body class="bg-industrial-bg text-slate-900 font-sans antialiased selection:bg-signal-500 selection:text-white">
@@ -882,12 +905,13 @@
   <script>
     // ==================== 1. ДАННЫЕ ПРАЙС-ЛИСТА AVANGARD LTD ====================
     const CATALOG_ITEMS = [
-      // Профильная труба (15 позиций)
+      // Профильная труба (16 позиций)
       { id: 'pt_20_20_15', category: 'prof_pipe', name: 'Профильная труба', size: '20×20 мм, стенка 1.5 мм', price: 2800, unit: 'хлыст', onRequest: false },
       { id: 'pt_20_25_15', category: 'prof_pipe', name: 'Профильная труба', size: '20×25 мм, стенка 1.5 мм', price: 3300, unit: 'хлыст', onRequest: false },
       { id: 'pt_25_50_2',  category: 'prof_pipe', name: 'Профильная труба', size: '25×50 мм, стенка 2 мм',   price: 6900, unit: 'хлыст', onRequest: false },
       { id: 'pt_40_20_2',  category: 'prof_pipe', name: 'Профильная труба', size: '40×20 мм, стенка 2 мм',   price: 5000, unit: 'хлыст', onRequest: false },
-      { id: 'pt_50_50_2',  category: 'prof_pipe', name: 'Профильная труба', size: '50×50 мм, стенка 2 мм',   price: 7000, unit: 'хлыст', onRequest: false },
+      { id: 'pt_50_50_2',  category: 'prof_pipe', name: 'Профильная труба', size: '50×50 мм, стенка 2 мм',   price: 8700, unit: 'хлыст', onRequest: false },
+      { id: 'pt_50_50_3',  category: 'prof_pipe', name: 'Профильная труба', size: '50×50 мм, стенка 3 мм',   price: 12500, unit: 'хлыст', onRequest: false },
       { id: 'pt_60_40_2',  category: 'prof_pipe', name: 'Профильная труба', size: '60×40 мм, стенка 2 мм',   price: 8700, unit: 'хлыст', onRequest: false },
       { id: 'pt_60_60_2b', category: 'prof_pipe', name: 'Профильная труба', size: '60×60 мм, стенка 2 мм (базовый хлыст)', price: 8700, unit: 'хлыст', onRequest: false },
       { id: 'pt_60_60_2u', category: 'prof_pipe', name: 'Профильная труба', size: '60×60 мм, стенка 2 мм (усиленный / 6 м)', price: 10800, unit: 'хлыст', onRequest: false },
@@ -1583,6 +1607,102 @@
     resetDims('prof_pipe');
     renderPresets();
     setCalcDirection('length');
+
+    // ==================== 5. АНИМАЦИИ И ПЛАВНАЯ ПРОКРУТКА ====================
+    document.documentElement.classList.add('js');
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Плавная прокрутка по якорям: неторопливый easing, учёт высоты шапки
+    const easeInOutQuint = t => (t < 0.5 ? 16 * t ** 5 : 1 - Math.pow(-2 * t + 2, 5) / 2);
+
+    function smoothScrollTo(targetY, duration = 1600) {
+      const startY = window.pageYOffset;
+      const diff = targetY - startY;
+      if (prefersReduced || Math.abs(diff) < 2) {
+        window.scrollTo(0, targetY);
+        return;
+      }
+      const root = document.documentElement;
+      const prevBehavior = root.style.scrollBehavior;
+      root.style.scrollBehavior = 'auto';
+      const startTime = performance.now();
+      const step = now => {
+        const p = Math.min((now - startTime) / duration, 1);
+        window.scrollTo(0, startY + diff * easeInOutQuint(p));
+        if (p < 1) requestAnimationFrame(step);
+        else root.style.scrollBehavior = prevBehavior;
+      };
+      requestAnimationFrame(step);
+    }
+
+    document.addEventListener('click', e => {
+      const a = e.target.closest('a[href^="#"]');
+      if (!a) return;
+      const id = a.getAttribute('href');
+      if (id.length < 2) return;
+      let el = null;
+      try { el = document.querySelector(id); } catch (_) { return; }
+      if (!el) return;
+      e.preventDefault();
+      const header = document.querySelector('header');
+      const offset = (header ? header.offsetHeight : 0) + 8;
+      const targetY = el.getBoundingClientRect().top + window.pageYOffset - offset;
+      closeMobileMenu();
+      history.replaceState(null, '', id);
+      smoothScrollTo(targetY);
+    });
+
+    if (!prefersReduced) {
+      const hero = document.querySelector('section.dark-tech-grid');
+
+      // Первый экран: неторопливый каскад при загрузке
+      if (hero) {
+        const heroItems = [
+          hero.querySelector('h1'),
+          hero.querySelector('p'),
+          hero.querySelector('div.flex.flex-col.sm\\:flex-row')
+        ].filter(Boolean);
+        heroItems.forEach((el, i) => {
+          el.classList.add('reveal');
+          el.style.setProperty('--d', (i * 220 + 250) + 'ms');
+        });
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          heroItems.forEach(el => el.classList.add('is-visible'));
+        }));
+      }
+
+      // Остальные блоки: появляются при попадании в зону видимости
+      const targets = new Set();
+      document.querySelectorAll('section:not(.dark-tech-grid) > div > div, footer > div > div').forEach(el => targets.add(el));
+      const featureCards = hero ? hero.querySelectorAll('.mt-12 > div') : [];
+      document.querySelectorAll('#services .grid > div').forEach(el => { targets.add(el); el.classList.add('lift'); });
+      featureCards.forEach(el => { targets.add(el); el.classList.add('lift'); });
+
+      // Каскад внутри одного родителя с заметной паузой
+      const byParent = new Map();
+      targets.forEach(el => {
+        const p = el.parentElement;
+        if (!byParent.has(p)) byParent.set(p, []);
+        byParent.get(p).push(el);
+      });
+      byParent.forEach(list => list.forEach((el, i) => el.style.setProperty('--d', Math.min(i * 160, 640) + 'ms')));
+
+      const io = new IntersectionObserver(entries => {
+        entries.forEach(en => {
+          if (!en.isIntersecting) return;
+          const el = en.target;
+          el.classList.add('is-visible');
+          io.unobserve(el);
+          // после завершения анимации убираем задержку, чтобы hover реагировал сразу
+          setTimeout(() => el.style.setProperty('--d', '0ms'), 2200);
+        });
+      }, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
+
+      targets.forEach(el => {
+        el.classList.add('reveal');
+        io.observe(el);
+      });
+    }
   </script>
 </body>
 </html>
